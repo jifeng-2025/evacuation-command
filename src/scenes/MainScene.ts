@@ -1,126 +1,94 @@
 import Phaser from 'phaser';
-
-const WORLD_WIDTH = 960;
-const WORLD_HEIGHT = 540;
-const PLAYER_RADIUS = 18;
-const PLAYER_SPEED = 260;
-const PLAYER_COLOR = 0x3b82f6;
-const PLAYER_STROKE = 0xbfdbfe;
-
-type MovementKeys = {
-  w: Phaser.Input.Keyboard.Key;
-  a: Phaser.Input.Keyboard.Key;
-  s: Phaser.Input.Keyboard.Key;
-  d: Phaser.Input.Keyboard.Key;
-  r: Phaser.Input.Keyboard.Key;
-};
+import { COLORS, ENEMY, WORLD } from '../config/gameConfig';
+import { Player } from '../entities/Player';
+import { CombatSystem } from '../systems/CombatSystem';
+import { Hud } from '../systems/Hud';
+import type { CombatResult, MovementKeys } from '../types/game';
 
 export class MainScene extends Phaser.Scene {
-  private player!: Phaser.GameObjects.Graphics;
-  private cursors!: MovementKeys;
-  private playerPosition = new Phaser.Math.Vector2(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
+  private player!: Player;
+  private combat!: CombatSystem;
+  private hud!: Hud;
+  private keys!: MovementKeys;
+  private result: CombatResult = 'playing';
 
   constructor() {
     super('MainScene');
   }
 
   create(): void {
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    this.result = 'playing';
+    this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
 
     this.drawBackground();
-    this.createPlayer();
-    this.createHud();
-    this.createInput();
+    this.keys = this.createInput();
+    this.player = new Player(this);
+    this.combat = new CombatSystem(this);
+    this.combat.spawnEnemies(this.player.position);
+    this.hud = new Hud(this);
+    this.hud.update(this.player.healthPoints, this.combat.killCount, this.combat.remainingEnemies);
   }
 
   update(_time: number, delta: number): void {
-    const direction = new Phaser.Math.Vector2(0, 0);
-
-    if (this.cursors.w.isDown) {
-      direction.y -= 1;
-    }
-
-    if (this.cursors.s.isDown) {
-      direction.y += 1;
-    }
-
-    if (this.cursors.a.isDown) {
-      direction.x -= 1;
-    }
-
-    if (this.cursors.d.isDown) {
-      direction.x += 1;
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.r)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
       this.scene.restart();
       return;
     }
 
-    if (direction.lengthSq() > 0) {
-      direction.normalize();
+    const isPlaying = this.result === 'playing';
+    this.player.update(delta, this.keys, this.input.activePointer, isPlaying);
+
+    if (isPlaying && this.input.activePointer.isDown) {
+      this.combat.tryShoot(this.player);
     }
 
-    const seconds = delta / 1000;
-    this.playerPosition.x = Phaser.Math.Clamp(
-      this.playerPosition.x + direction.x * PLAYER_SPEED * seconds,
-      PLAYER_RADIUS,
-      WORLD_WIDTH - PLAYER_RADIUS,
-    );
-    this.playerPosition.y = Phaser.Math.Clamp(
-      this.playerPosition.y + direction.y * PLAYER_SPEED * seconds,
-      PLAYER_RADIUS,
-      WORLD_HEIGHT - PLAYER_RADIUS,
-    );
+    this.combat.update(delta, this.player, isPlaying && this.player.isAlive);
+    this.updateResult();
+    this.hud.update(this.player.healthPoints, this.combat.killCount, this.combat.remainingEnemies);
+  }
 
-    this.player.setPosition(this.playerPosition.x, this.playerPosition.y);
+  private updateResult(): void {
+    if (this.result !== 'playing') {
+      return;
+    }
+
+    if (!this.player.isAlive) {
+      this.result = 'defeat';
+      this.hud.showResult(this, this.result, this.combat.killCount);
+      return;
+    }
+
+    if (this.combat.killCount >= ENEMY.count) {
+      this.result = 'victory';
+      this.hud.showResult(this, this.result, this.combat.killCount);
+    }
   }
 
   private drawBackground(): void {
     const background = this.add.graphics();
-    background.fillStyle(0x0b1020, 1);
-    background.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    background.fillStyle(COLORS.background, 1);
+    background.fillRect(0, 0, WORLD.width, WORLD.height);
 
-    background.lineStyle(2, 0x1e293b, 1);
-    background.strokeRect(16, 16, WORLD_WIDTH - 32, WORLD_HEIGHT - 32);
+    background.lineStyle(2, COLORS.border, 1);
+    background.strokeRect(WORLD.padding, WORLD.padding, WORLD.width - WORLD.padding * 2, WORLD.height - WORLD.padding * 2);
 
-    background.lineStyle(1, 0x172033, 0.6);
-    for (let x = 0; x <= WORLD_WIDTH; x += 48) {
-      background.lineBetween(x, 0, x, WORLD_HEIGHT);
+    background.lineStyle(1, COLORS.grid, 0.6);
+    for (let x = 0; x <= WORLD.width; x += WORLD.gridSize) {
+      background.lineBetween(x, 0, x, WORLD.height);
     }
-    for (let y = 0; y <= WORLD_HEIGHT; y += 48) {
-      background.lineBetween(0, y, WORLD_WIDTH, y);
+    for (let y = 0; y <= WORLD.height; y += WORLD.gridSize) {
+      background.lineBetween(0, y, WORLD.width, y);
     }
   }
 
-  private createPlayer(): void {
-    this.playerPosition.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
-    this.player = this.add.graphics({ x: this.playerPosition.x, y: this.playerPosition.y });
-    this.player.fillStyle(PLAYER_COLOR, 1);
-    this.player.fillCircle(0, 0, PLAYER_RADIUS);
-    this.player.lineStyle(3, PLAYER_STROKE, 1);
-    this.player.strokeCircle(0, 0, PLAYER_RADIUS);
-  }
-
-  private createHud(): void {
-    this.add
-      .text(24, 24, 'Evacuation Command\nWASD 移动 · R 重新开始', {
-        color: '#e5e7eb',
-        fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
-        fontSize: '20px',
-        lineSpacing: 8,
-      })
-      .setDepth(10);
-  }
-
-  private createInput(): void {
+  private createInput(): MovementKeys {
     const keyboard = this.input.keyboard;
 
     if (!keyboard) {
       throw new Error('Keyboard input is unavailable in this environment.');
     }
 
-    this.cursors = keyboard.addKeys({
+    return keyboard.addKeys({
       w: Phaser.Input.Keyboard.KeyCodes.W,
       a: Phaser.Input.Keyboard.KeyCodes.A,
       s: Phaser.Input.Keyboard.KeyCodes.S,
