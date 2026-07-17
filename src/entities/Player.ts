@@ -4,7 +4,7 @@ import type { MovementKeys } from '../types/game';
 
 export class Player {
   public readonly radius = PLAYER.radius;
-  public readonly position = new Phaser.Math.Vector2(WORLD.width / 2, WORLD.height / 2);
+  public readonly position = new Phaser.Math.Vector2(PLAYER.startX, PLAYER.startY);
 
   private readonly view: Phaser.GameObjects.Graphics;
   private readonly aimDirection = new Phaser.Math.Vector2(1, 0);
