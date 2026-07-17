@@ -1,99 +1,75 @@
 import Phaser from 'phaser';
-import { COLORS, ENEMY, WORLD } from '../config/gameConfig';
+import { COLORS, WORLD } from '../config/gameConfig';
 import { Player } from '../entities/Player';
 import { CombatSystem } from '../systems/CombatSystem';
 import { Hud } from '../systems/Hud';
-import type { CombatResult, MovementKeys } from '../types/game';
+import { MissionSystem } from '../systems/MissionSystem';
+import type { MovementKeys } from '../types/game';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
   private combat!: CombatSystem;
+  private mission!: MissionSystem;
   private hud!: Hud;
   private keys!: MovementKeys;
-  private result: CombatResult = 'playing';
+  private resultShown = false;
 
-  constructor() {
-    super('MainScene');
-  }
+  constructor() { super('MainScene'); }
 
   create(): void {
-    this.result = 'playing';
+    this.resultShown = false;
     this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
-
     this.drawBackground();
     this.keys = this.createInput();
     this.player = new Player(this);
     this.combat = new CombatSystem(this);
     this.combat.spawnEnemies(this.player.position);
+    this.mission = new MissionSystem(this);
     this.hud = new Hud(this);
-    this.hud.update(this.player.healthPoints, this.combat.killCount, this.combat.remainingEnemies);
+    this.refreshHud();
   }
 
   update(_time: number, delta: number): void {
     if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
+      this.combat.stopReinforcements();
       this.scene.restart();
       return;
     }
+    const playing = !this.mission.isFinished;
+    this.player.update(delta, this.keys, this.input.activePointer, playing);
+    if (playing && this.input.activePointer.isDown) this.combat.tryShoot(this.player);
+    this.combat.update(delta, this.player, playing && this.player.isAlive);
 
-    const isPlaying = this.result === 'playing';
-    this.player.update(delta, this.keys, this.input.activePointer, isPlaying);
-
-    if (isPlaying && this.input.activePointer.isDown) {
-      this.combat.tryShoot(this.player);
+    const intelJustCollected = this.mission.update(delta, this.player);
+    if (intelJustCollected) this.combat.enableReinforcements();
+    if (this.mission.isFinished) {
+      this.combat.stopReinforcements();
+      this.showResult();
     }
-
-    this.combat.update(delta, this.player, isPlaying && this.player.isAlive);
-    this.updateResult();
-    this.hud.update(this.player.healthPoints, this.combat.killCount, this.combat.remainingEnemies);
+    this.refreshHud();
   }
 
-  private updateResult(): void {
-    if (this.result !== 'playing') {
-      return;
-    }
+  private showResult(): void {
+    if (this.resultShown) return;
+    this.resultShown = true;
+    const snapshot = this.mission.snapshot;
+    this.hud.showResult(this, snapshot.phase === 'SUCCESS' ? 'SUCCESS' : 'FAILED', this.combat.killCount, this.mission.failureReason);
+  }
 
-    if (!this.player.isAlive) {
-      this.result = 'defeat';
-      this.hud.showResult(this, this.result, this.combat.killCount);
-      return;
-    }
-
-    if (this.combat.killCount >= ENEMY.count) {
-      this.result = 'victory';
-      this.hud.showResult(this, this.result, this.combat.killCount);
-    }
+  private refreshHud(): void {
+    this.hud.update(this.player.healthPoints, this.combat.killCount, this.combat.remainingEnemies, this.mission.snapshot);
   }
 
   private drawBackground(): void {
-    const background = this.add.graphics();
-    background.fillStyle(COLORS.background, 1);
-    background.fillRect(0, 0, WORLD.width, WORLD.height);
-
-    background.lineStyle(2, COLORS.border, 1);
-    background.strokeRect(WORLD.padding, WORLD.padding, WORLD.width - WORLD.padding * 2, WORLD.height - WORLD.padding * 2);
-
+    const background = this.add.graphics().fillStyle(COLORS.background, 1).fillRect(0, 0, WORLD.width, WORLD.height);
+    background.lineStyle(2, COLORS.border, 1).strokeRect(WORLD.padding, WORLD.padding, WORLD.width - WORLD.padding * 2, WORLD.height - WORLD.padding * 2);
     background.lineStyle(1, COLORS.grid, 0.6);
-    for (let x = 0; x <= WORLD.width; x += WORLD.gridSize) {
-      background.lineBetween(x, 0, x, WORLD.height);
-    }
-    for (let y = 0; y <= WORLD.height; y += WORLD.gridSize) {
-      background.lineBetween(0, y, WORLD.width, y);
-    }
+    for (let x = 0; x <= WORLD.width; x += WORLD.gridSize) background.lineBetween(x, 0, x, WORLD.height);
+    for (let y = 0; y <= WORLD.height; y += WORLD.gridSize) background.lineBetween(0, y, WORLD.width, y);
   }
 
   private createInput(): MovementKeys {
-    const keyboard = this.input.keyboard;
-
-    if (!keyboard) {
-      throw new Error('Keyboard input is unavailable in this environment.');
-    }
-
-    return keyboard.addKeys({
-      w: Phaser.Input.Keyboard.KeyCodes.W,
-      a: Phaser.Input.Keyboard.KeyCodes.A,
-      s: Phaser.Input.Keyboard.KeyCodes.S,
-      d: Phaser.Input.Keyboard.KeyCodes.D,
-      r: Phaser.Input.Keyboard.KeyCodes.R,
-    }) as MovementKeys;
+    if (!this.input.keyboard) throw new Error('Keyboard input is unavailable in this environment.');
+    return this.input.keyboard.addKeys({ w: Phaser.Input.Keyboard.KeyCodes.W, a: Phaser.Input.Keyboard.KeyCodes.A, s: Phaser.Input.Keyboard.KeyCodes.S, d: Phaser.Input.Keyboard.KeyCodes.D, r: Phaser.Input.Keyboard.KeyCodes.R }) as MovementKeys;
   }
 }

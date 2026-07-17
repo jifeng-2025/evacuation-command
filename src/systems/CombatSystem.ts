@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BULLET, ENEMY, WORLD } from '../config/gameConfig';
+import { BULLET, ENEMY, MISSION, WORLD } from '../config/gameConfig';
 import { Bullet } from '../entities/Bullet';
 import { Enemy } from '../entities/Enemy';
 import { Player } from '../entities/Player';
@@ -9,6 +9,8 @@ export class CombatSystem {
   private readonly bullets: Bullet[] = [];
   private readonly enemies: Enemy[] = [];
   private kills = 0;
+  private reinforcementsEnabled = false;
+  private reinforcementRemainingMs = this.nextReinforcementDelay();
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -31,6 +33,15 @@ export class CombatSystem {
     }
   }
 
+  enableReinforcements(): void {
+    this.reinforcementsEnabled = true;
+    this.reinforcementRemainingMs = this.nextReinforcementDelay();
+  }
+
+  stopReinforcements(): void {
+    this.reinforcementsEnabled = false;
+  }
+
   tryShoot(player: Player): void {
     if (!player.canShoot()) {
       return;
@@ -44,6 +55,16 @@ export class CombatSystem {
   }
 
   update(deltaMs: number, player: Player, canEnemiesAttack: boolean): void {
+    if (this.reinforcementsEnabled && canEnemiesAttack) {
+      this.reinforcementRemainingMs -= deltaMs;
+      if (this.reinforcementRemainingMs <= 0) {
+        if (this.remainingEnemies < ENEMY.maximumAlive) {
+          const spawn = this.findEnemySpawn(player.position, true);
+          this.enemies.push(new Enemy(this.scene, spawn.x, spawn.y));
+        }
+        this.reinforcementRemainingMs = this.nextReinforcementDelay();
+      }
+    }
     for (const bullet of this.bullets) {
       bullet.update(deltaMs);
     }
@@ -107,17 +128,32 @@ export class CombatSystem {
     }
   }
 
-  private findEnemySpawn(playerPosition: Phaser.Math.Vector2): Phaser.Math.Vector2 {
+  private findEnemySpawn(playerPosition: Phaser.Math.Vector2, avoidExtraction = false): Phaser.Math.Vector2 {
     for (let attempt = 0; attempt < 80; attempt += 1) {
       const x = Phaser.Math.Between(ENEMY.radius + WORLD.padding, WORLD.width - ENEMY.radius - WORLD.padding);
       const y = Phaser.Math.Between(ENEMY.radius + WORLD.padding, WORLD.height - ENEMY.radius - WORLD.padding);
       const distance = Phaser.Math.Distance.Between(x, y, playerPosition.x, playerPosition.y);
 
-      if (distance >= ENEMY.minimumSpawnDistanceFromPlayer) {
+      const insideExtraction = Phaser.Geom.Rectangle.Contains(
+        new Phaser.Geom.Rectangle(
+          MISSION.extractionX - MISSION.extractionWidth / 2,
+          MISSION.extractionY - MISSION.extractionHeight / 2,
+          MISSION.extractionWidth,
+          MISSION.extractionHeight,
+        ),
+        x,
+        y,
+      );
+
+      if (distance >= ENEMY.minimumSpawnDistanceFromPlayer && (!avoidExtraction || !insideExtraction)) {
         return new Phaser.Math.Vector2(x, y);
       }
     }
 
     return new Phaser.Math.Vector2(WORLD.padding + ENEMY.radius, WORLD.padding + ENEMY.radius);
+  }
+
+  private nextReinforcementDelay(): number {
+    return Phaser.Math.Between(ENEMY.reinforcementMinIntervalMs, ENEMY.reinforcementMaxIntervalMs);
   }
 }

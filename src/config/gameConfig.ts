@@ -9,6 +9,8 @@ export const WORLD = {
 } as const;
 
 export const PLAYER = {
+  startX: 120,
+  startY: 420,
   radius: 18,
   speed: 260,
   maxHealth: 100,
@@ -36,6 +38,21 @@ export const ENEMY = {
   hitFlashMs: 120,
   deathFadeMs: 180,
   minimumSpawnDistanceFromPlayer: 230,
+  reinforcementMinIntervalMs: 5000,
+  reinforcementMaxIntervalMs: 7000,
+  maximumAlive: 8,
+} as const;
+
+export const MISSION = {
+  durationMs: 180_000,
+  intelX: GAME_WIDTH / 2,
+  intelY: GAME_HEIGHT / 2,
+  intelPickupRadius: 38,
+  extractionX: 820,
+  extractionY: 86,
+  extractionWidth: 180,
+  extractionHeight: 108,
+  extractionDurationMs: 3000,
 } as const;
 
 export const COLORS = {
@@ -53,4 +70,7 @@ export const COLORS = {
   muzzle: 0xf97316,
   overlay: 0x020617,
   particle: 0xf87171,
+  intel: 0xfacc15,
+  extractionLocked: 0x64748b,
+  extractionActive: 0x2dd4bf,
 } as const;

@@ -6,4 +6,13 @@ export type MovementKeys = {
   r: Phaser.Input.Keyboard.Key;
 };
 
-export type CombatResult = 'playing' | 'victory' | 'defeat';
+export type GamePhase = 'SEARCH_INTEL' | 'EXTRACT' | 'EXTRACTING' | 'SUCCESS' | 'FAILED';
+
+export type FailureReason = 'death' | 'timeout';
+
+export type MissionSnapshot = {
+  phase: GamePhase;
+  hasIntel: boolean;
+  remainingMs: number;
+  extractionProgress: number;
+};
