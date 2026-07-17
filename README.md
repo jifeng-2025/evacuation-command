@@ -78,7 +78,13 @@ npm ci
 npm run dev
 ```
 
-默认开发服务器地址为 <http://localhost:5173>。
+本地开发地址默认为 <http://localhost:5173>。
+
+## 在线试玩
+
+游戏部署于 GitHub Pages：<https://jifeng-2025.github.io/evacuation-command/>。
+
+`main` 分支更新后，GitHub Actions 会自动重新构建并部署在线版本。
 
 ## 生产构建
 
